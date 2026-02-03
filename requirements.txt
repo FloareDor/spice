@@ -1,0 +1,10 @@
+# LocalVibe - Core Dependencies
+# Phase 1: Audio Analysis (BPM/Key detection)
+librosa>=0.10.0
+numpy>=1.24.0
+
+# Phase 2: CLaMP 3 (add later for semantic search)
+# torch>=2.0.0
+# torchaudio>=2.0.0
+# transformers>=4.30.0
+# onnxruntime>=1.15.0
