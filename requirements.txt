@@ -19,3 +19,4 @@ samplings==0.1.7
 abctoolkit==0.0.4
 soundfile==0.12.1
 nnAudio==0.3.3
+lancedb>=0.5.0

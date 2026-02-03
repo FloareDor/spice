@@ -1,1 +1,24 @@
 Processed and saved E:\cmu-e\spice\test_data\test_sine.wav
+Processed and saved E:\cmu-e\spice\test_lancedb\clamp_in_b1bc6fc8\test_sine.wav
+Processed and saved E:\cmu-e\spice\.indexer_temp\clamp_batch_input\tone_220hz.wav
+Processed and saved E:\cmu-e\spice\.indexer_temp\clamp_batch_input\tone_440hz.wav
+Processed and saved E:\cmu-e\spice\.indexer_temp\clamp_batch_input\tone_880hz.wav
+Processed and saved E:\cmu-e\spice\.indexer_temp\clamp_batch_input\bass_low.wav
+Processed and saved E:\cmu-e\spice\.indexer_temp\clamp_batch_input\bass_mid.wav
+Processed and saved E:\cmu-e\spice\.indexer_temp\clamp_batch_input\synth_high.wav
+Processed and saved E:\cmu-e\spice\.search_temp\search_input\bass_low.wav
+Processed and saved E:\cmu-e\spice\.indexer_temp\clamp_batch_input\Break It Down... 1.wav
+Processed and saved E:\cmu-e\spice\.indexer_temp\clamp_batch_input\Break It Down... 3.wav
+Processed and saved E:\cmu-e\spice\.indexer_temp\clamp_batch_input\Djent Riff (Loop in E).wav
+Processed and saved E:\cmu-e\spice\.indexer_temp\clamp_batch_input\Feedback - Changing & Whammy Down.wav
+Processed and saved E:\cmu-e\spice\.indexer_temp\clamp_batch_input\Fuck It 2.wav
+Processed and saved E:\cmu-e\spice\.indexer_temp\clamp_batch_input\I'm About To... 1.wav
+Processed and saved E:\cmu-e\spice\.indexer_temp\clamp_batch_input\Meet Me In The Moshpit 5.wav
+Processed and saved E:\cmu-e\spice\.indexer_temp\clamp_batch_input\MOONBOY - Chaos Impact 1.wav
+Processed and saved E:\cmu-e\spice\.indexer_temp\clamp_batch_input\MOONBOY - Chaos Impact 9.wav
+Processed and saved E:\cmu-e\spice\.indexer_temp\clamp_batch_input\Moonboy x Agony Machine Gun Bass 9.wav
+Processed and saved E:\cmu-e\spice\.indexer_temp\clamp_batch_input\Normal and Dirty Breakdown Riff (Loop in E).wav
+Processed and saved E:\cmu-e\spice\.indexer_temp\clamp_batch_input\Siren-1.wav
+Processed and saved E:\cmu-e\spice\.indexer_temp\clamp_batch_input\TRACK 0001 [2022-08-21 210807].wav
+Processed and saved E:\cmu-e\spice\.indexer_temp\clamp_batch_input\TRACK 02_MIX 2_DRUMS.wav
+Processed and saved E:\cmu-e\spice\.search_temp\search_input\MOONBOY - Chaos Impact 1.wav

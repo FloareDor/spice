@@ -1,1 +1,5 @@
 Failed to load audio E:\cmu-e\spice\test_data\test_sine.wav: TorchCodec is required for load_with_torchcodec. Please install torchcodec to use this function.
+Failed to process E:\cmu-e\spice\.indexer_temp\clamp_batch_input\Dissonant Notes - Higher & Short.wav: torch.cat(): expected a non-empty list of Tensors
+Failed to process E:\cmu-e\spice\.indexer_temp\clamp_batch_input\MNBOY Bass House Kick 1.wav: torch.cat(): expected a non-empty list of Tensors
+Failed to process E:\cmu-e\spice\.indexer_temp\clamp_batch_input\MOONBOY - Trap Bass Fill A 1 140.wav: torch.cat(): expected a non-empty list of Tensors
+Failed to process E:\cmu-e\spice\.indexer_temp\clamp_batch_input\Moonboy x Agony Machine Gun Bass 24.wav: torch.cat(): expected a non-empty list of Tensors

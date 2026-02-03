@@ -1,4 +1,4 @@
-"""
+r"""
 LocalVibe Core Tech Validator (Librosa Edition)
 Validates BPM and Key detection on a folder of WAV files.
 
@@ -6,7 +6,7 @@ Uses librosa instead of Essentia for cross-platform Windows support.
 
 Usage:
     python validate_core.py "C:/path/to/samples"
-    
+
 Activate venv first:
     .\venv\Scripts\activate
 """
