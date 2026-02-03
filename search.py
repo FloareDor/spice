@@ -128,7 +128,7 @@ def matches_key(metadata: dict, key_filter: tuple[str | None, str | None]) -> bo
 def filter_results(
     results: list[dict],
     bpm_range: tuple[float, float] | None = None,
-    key_filter: tuple[str, str | None] | None = None,
+    key_filter: tuple[str | None, str | None] | None = None,
 ) -> list[dict]:
     """Filter search results by BPM and/or key."""
     filtered = []
@@ -245,7 +245,7 @@ def search_by_audio(
     db_path: str,
     limit: int,
     bpm_range: tuple[float, float] | None = None,
-    key_filter: tuple[str, str | None] | None = None,
+    key_filter: tuple[str | None, str | None] | None = None,
 ) -> list[dict]:
     """Search for samples similar to an audio file."""
     temp_dir = Path(".search_temp")
@@ -275,7 +275,7 @@ def search_by_text(
     db_path: str,
     limit: int,
     bpm_range: tuple[float, float] | None = None,
-    key_filter: tuple[str, str | None] | None = None,
+    key_filter: tuple[str | None, str | None] | None = None,
 ) -> list[dict]:
     """Search for samples matching a text description."""
     temp_dir = Path(".search_temp")
@@ -304,7 +304,7 @@ def list_samples(
     db_path: str,
     limit: int,
     bpm_range: tuple[float, float] | None = None,
-    key_filter: tuple[str, str | None] | None = None,
+    key_filter: tuple[str | None, str | None] | None = None,
 ) -> None:
     """List all indexed samples, optionally filtered."""
     import json
@@ -319,7 +319,11 @@ def list_samples(
         return
 
     # Get samples
-    fetch_limit = limit * 5 if (bpm_range or key_filter) else limit
+    if bpm_range or key_filter:
+        fetch_limit = max(limit * 10, 1000)
+    else:
+        fetch_limit = limit
+
     rows = table.search().limit(fetch_limit).to_list()
 
     # Convert to result format and filter
@@ -445,7 +449,10 @@ Examples:
         else:
             print(f"  BPM filter: {bpm_range[0]}-{bpm_range[1]}")
     if key_filter:
-        key_str = key_filter[0] + (f" {key_filter[1]}" if key_filter[1] else "")
+        parts = []
+        if key_filter[0]: parts.append(key_filter[0])
+        if key_filter[1]: parts.append(key_filter[1])
+        key_str = " ".join(parts)
         print(f"  Key filter: {key_str}")
 
     if args.list:
