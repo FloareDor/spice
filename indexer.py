@@ -20,6 +20,7 @@ from tqdm import tqdm
 
 import database as db
 from validate_core import analyze_audio
+import autotagger
 
 # Supported audio extensions
 AUDIO_EXTENSIONS = {".wav", ".mp3", ".flac", ".ogg"}
@@ -127,6 +128,7 @@ def index_folder(
     recursive: bool = False,
     batch_size: int = 50,
     max_workers: int = 4,
+    progress_callback=None,
 ) -> dict:
     """
     Index all audio files in a folder.
@@ -137,6 +139,7 @@ def index_folder(
         recursive: Search subfolders recursively
         batch_size: Number of files to process per CLaMP batch
         max_workers: Number of parallel workers for librosa analysis
+        progress_callback: Optional callable(processed, total, status_msg)
 
     Returns:
         Dict with indexing statistics
@@ -144,6 +147,8 @@ def index_folder(
     stats = {"total": 0, "new": 0, "skipped": 0, "errors": 0}
 
     # Find all audio files
+    if progress_callback:
+        progress_callback(0, 0, f"Scanning {folder}...")
     print(f"Scanning {folder}...")
     audio_files = find_audio_files(folder, recursive)
     stats["total"] = len(audio_files)
@@ -156,6 +161,10 @@ def index_folder(
     lance_db = db.get_db(db_path)
     table = db.create_samples_table(lance_db)
 
+    # Load tag embeddings for auto-tagging
+    print("Loading tag embeddings...")
+    tag_embeddings = autotagger.load_tag_embeddings()
+
     # Get already indexed files
     indexed = get_indexed_filenames(table)
     print(f"Already indexed: {len(indexed)} files")
@@ -167,6 +176,8 @@ def index_folder(
 
     if not new_files:
         print("No new files to index")
+        if progress_callback:
+            progress_callback(len(audio_files), len(audio_files), "No new files.")
         return stats
 
     print(f"Indexing {len(new_files)} new files...")
@@ -175,25 +186,36 @@ def index_folder(
     temp_dir = Path(db_path).parent / ".indexer_temp"
     temp_dir.mkdir(exist_ok=True)
 
+    processed_count = 0
     try:
         for batch_start in range(0, len(new_files), batch_size):
             batch_files = new_files[batch_start:batch_start + batch_size]
             batch_num = batch_start // batch_size + 1
             total_batches = (len(new_files) + batch_size - 1) // batch_size
 
-            print(f"\nBatch {batch_num}/{total_batches} ({len(batch_files)} files)")
+            msg = f"Batch {batch_num}/{total_batches} ({len(batch_files)} files)"
+            print(f"\n{msg}")
+            if progress_callback:
+                progress_callback(processed_count, len(new_files), msg)
 
             # Step 1: Extract CLaMP embeddings (batch)
             print("  Extracting embeddings...")
+            if progress_callback:
+                progress_callback(processed_count, len(new_files), f"Extracting embeddings (Batch {batch_num})...")
+            
             try:
                 embeddings = run_clamp_batch(batch_files, temp_dir)
             except Exception as e:
                 print(f"  CLaMP batch failed: {e}")
                 stats["errors"] += len(batch_files)
+                processed_count += len(batch_files)
                 continue
 
             # Step 2: Analyze BPM/key in parallel
             print("  Analyzing audio (BPM/key)...")
+            if progress_callback:
+                progress_callback(processed_count, len(new_files), f"Analyzing audio (Batch {batch_num})...")
+
             analyses = {}
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = {
@@ -228,6 +250,9 @@ def index_folder(
 
                 key_str = f"{analysis.get('key', '')} {analysis.get('scale', '')}".strip()
 
+                # Generate tags
+                tags = autotagger.suggest_tags(embedding, tag_embeddings, top_k=5)
+
                 metadata = db.build_metadata(
                     filename=filename,
                     path=str(audio_file.resolve()),
@@ -236,6 +261,9 @@ def index_folder(
                     duration_sec=analysis.get("duration_sec", 0.0),
                     file_size_bytes=audio_file.stat().st_size,
                 )
+                
+                # Add tags to metadata
+                metadata["tags"] = tags
 
                 samples.append({
                     "filename": filename,
@@ -247,6 +275,10 @@ def index_folder(
             if samples:
                 print(f"  Storing {len(samples)} embeddings...")
                 db.add_samples_batch(table, samples)
+            
+            processed_count += len(batch_files)
+            if progress_callback:
+                progress_callback(processed_count, len(new_files), f"Completed Batch {batch_num}")
 
     finally:
         # Cleanup temp directory
