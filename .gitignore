@@ -1,1 +1,9 @@
-/venv/Lib
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+test_data/
+test_output/
+*.log
+*.npy
+*.pth

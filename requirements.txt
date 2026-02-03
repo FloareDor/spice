@@ -3,8 +3,19 @@
 librosa>=0.10.0
 numpy>=1.24.0
 
-# Phase 2: CLaMP 3 (add later for semantic search)
-# torch>=2.0.0
-# torchaudio>=2.0.0
-# transformers>=4.30.0
-# onnxruntime>=1.15.0
+# Phase 2: CLaMP 3 Dependencies
+torch>=2.0.0
+torchaudio>=2.0.0
+transformers==4.40.0
+accelerate==0.34.0
+scikit-learn==1.5.1
+# numpy==1.26.4  # librosa handles numpy
+tqdm==4.66.5
+unidecode==1.3.6
+wandb==0.17.8
+pillow==9.5.0
+mido==1.3.0
+samplings==0.1.7
+abctoolkit==0.0.4
+soundfile==0.12.1
+nnAudio==0.3.3
