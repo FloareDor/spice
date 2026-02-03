@@ -7,3 +7,10 @@ test_output/
 *.log
 *.npy
 *.pth
+
+/dist
+
+/dist
+
+/build
+/build

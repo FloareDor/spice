@@ -24,3 +24,6 @@ lancedb>=0.5.0
 # Phase 3: UI
 PyQt5
 PyQt-Fluent-Widgets
+
+# Packaging
+pyinstaller
