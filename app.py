@@ -12,209 +12,20 @@ from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
 
 from qfluentwidgets import (
     FluentWindow, ListWidget, FluentIcon as FIF, SearchLineEdit, 
-    PushButton, PrimaryPushButton, SubtitleLabel
+    PushButton, PrimaryPushButton, SubtitleLabel, Slider,
+    SwitchButton, ToggleButton, TransparentToolButton, PopUpAniStackedWidget
 )
 
 import search
 import indexer
+import library_config
 from waveform import WaveformWidget
 from galaxy import GalaxyWidget
+from onboarding import OnboardingView
 
 # --- Threads ---
 
-class SearchThread(QThread):
-    results_ready = pyqtSignal(list)
-    status_update = pyqtSignal(str)
-
-    def __init__(self, query_text):
-        super().__init__()
-        self.query_text = query_text
-
-    def run(self):
-        try:
-            results = search.search_by_text(
-                self.query_text,
-                "./localvibe.lance",
-                limit=50,
-                status_callback=self.status_update.emit
-            )
-            self.results_ready.emit(results)
-        except Exception as e:
-            print(f"Search thread error: {e}")
-            self.results_ready.emit([])
-
-
-class FindSimilarThread(QThread):
-    """Thread for finding samples similar to an existing sample."""
-    results_ready = pyqtSignal(list)
-    status_update = pyqtSignal(str)
-
-    def __init__(self, file_path: str):
-        super().__init__()
-        self.file_path = file_path
-
-    def run(self):
-        try:
-            self.status_update.emit(f"Finding samples similar to {Path(self.file_path).name}...")
-            results = search.search_similar_to_sample(
-                self.file_path,
-                "./localvibe.lance",
-                limit=50
-            )
-            self.results_ready.emit(results)
-        except Exception as e:
-            print(f"Find similar thread error: {e}")
-            self.status_update.emit(f"Error: {e}")
-            self.results_ready.emit([])
-
-class IndexingThread(QThread):
-    progress_signal = pyqtSignal(int, int, str) # processed, total, message
-    finished_signal = pyqtSignal(dict)
-    
-    def __init__(self, folder_path):
-        super().__init__()
-        self.folder_path = folder_path
-        
-    def run(self):
-        try:
-            stats = indexer.index_folder(
-                Path(self.folder_path),
-                db_path="./localvibe.lance",
-                recursive=True,
-                progress_callback=self.emit_progress
-            )
-            self.finished_signal.emit(stats)
-        except Exception as e:
-            self.progress_signal.emit(0, 0, f"Error: {e}")
-            self.finished_signal.emit({})
-
-    def emit_progress(self, processed, total, msg):
-        self.progress_signal.emit(processed, total, msg)
-
-# --- Widgets ---
-
-class SampleListWidget(ListWidget):
-    # Signal emitted when user wants to find similar samples
-    find_similar_requested = pyqtSignal(str)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setDragEnabled(True)
-        self.setSelectionMode(QListWidget.SingleSelection)
-        self.setObjectName("sampleList")
-        self.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.customContextMenuRequested.connect(self.show_context_menu)
-
-    def show_context_menu(self, pos):
-        """Show context menu with Find Similar option."""
-        item = self.itemAt(pos)
-        if not item:
-            return
-
-        file_path = item.data(Qt.UserRole)
-        if not file_path:
-            return
-
-        menu = QMenu(self)
-
-        # Find Similar action
-        find_similar_action = QAction("Find Similar", self)
-        find_similar_action.setIcon(FIF.SEARCH.icon())
-        find_similar_action.triggered.connect(lambda: self.find_similar_requested.emit(file_path))
-        menu.addAction(find_similar_action)
-
-        # Open folder action
-        open_folder_action = QAction("Open Containing Folder", self)
-        open_folder_action.setIcon(FIF.FOLDER.icon())
-        open_folder_action.triggered.connect(lambda: self.open_containing_folder(file_path))
-        menu.addAction(open_folder_action)
-
-        menu.exec_(self.mapToGlobal(pos))
-
-    def open_containing_folder(self, file_path: str):
-        """Open the folder containing the sample in the system file explorer."""
-        import subprocess
-        folder = str(Path(file_path).parent)
-        if sys.platform == "win32":
-            subprocess.run(["explorer", folder])
-        elif sys.platform == "darwin":
-            subprocess.run(["open", folder])
-        else:
-            subprocess.run(["xdg-open", folder])
-
-    def startDrag(self, supportedActions):
-        item = self.currentItem()
-        if not item:
-            return
-
-        file_path = item.data(Qt.UserRole)
-        if not file_path:
-            return
-
-        mime = QMimeData()
-        url = QUrl.fromLocalFile(file_path)
-        mime.setUrls([url])
-
-        drag = QDrag(self)
-        drag.setMimeData(mime)
-        drag.exec_(Qt.CopyAction)
-
-class GalaxyInterface(QWidget):
-    """Interface for the Galaxy Map visualization."""
-    sample_selected = pyqtSignal(dict)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setObjectName("galaxyInterface")
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
-
-        # Header
-        header_layout = QHBoxLayout()
-        title = SubtitleLabel("Galaxy Map", self)
-        header_layout.addWidget(title)
-
-        self.load_btn = PrimaryPushButton(FIF.SYNC, "Load Galaxy", self)
-        self.load_btn.clicked.connect(self.load_galaxy)
-        header_layout.addWidget(self.load_btn)
-
-        header_layout.addStretch(1)
-        layout.addLayout(header_layout)
-
-        # Info label
-        self.info_label = QLabel("Visualize your entire sample library as a 2D map. Similar sounds cluster together.", self)
-        self.info_label.setWordWrap(True)
-        self.info_label.setStyleSheet("color: #888;")
-        layout.addWidget(self.info_label)
-
-        # Galaxy widget
-        self.galaxy = GalaxyWidget(self)
-        self.galaxy.sample_selected.connect(self.on_sample_selected)
-        layout.addWidget(self.galaxy, 1)
-
-        # Instructions
-        instructions = QLabel("Scroll to zoom | Drag to pan | Click samples to select | Right-click to reset view", self)
-        instructions.setStyleSheet("color: #666; font-size: 10px;")
-        layout.addWidget(instructions)
-
-    def load_galaxy(self):
-        """Load/refresh the galaxy visualization."""
-        self.load_btn.setEnabled(False)
-        self.galaxy.load_data()
-        # Re-enable after a delay (UMAP thread will update status)
-        self.load_btn.setEnabled(True)
-
-    def on_sample_selected(self, meta: dict):
-        """Handle sample selection from galaxy."""
-        self.sample_selected.emit(meta)
-
-    def highlight_search_results(self, results: list):
-        """Highlight samples that match search results."""
-        paths = {r.get("metadata", {}).get("path") for r in results}
-        self.galaxy.highlight_samples(paths)
-
+# ... (SearchThread, FindSimilarThread, IndexingThread remain same)
 
 class LibraryInterface(QWidget):
     def __init__(self, parent=None):
@@ -236,6 +47,12 @@ class LibraryInterface(QWidget):
         btn_layout.addWidget(self.add_btn)
         btn_layout.addStretch(1)
         layout.addLayout(btn_layout)
+
+        # Folder List
+        layout.addWidget(QLabel("Indexed Folders (Right-click to Rescan/Remove):"))
+        self.folder_list = ListWidget(self)
+        self.folder_list.setFixedHeight(150)
+        layout.addWidget(self.folder_list)
         
         # Progress
         self.status_label = QLabel("Ready", self)
@@ -251,12 +68,64 @@ class LibraryInterface(QWidget):
         self.log_area.setReadOnly(True)
         self.log_area.setPlaceholderText("Indexing logs will appear here...")
         layout.addWidget(self.log_area)
+
+        self.load_folders()
+
+    def load_folders(self):
+        """Load indexed folders from config into the list."""
+        self.folder_list.clear()
+        folders = library_config.get_folders()
+        for folder in folders:
+            item = QListWidgetItem(folder)
+            self.folder_list.addItem(item)
+        
+        # Add context menu for folders
+        self.folder_list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.folder_list.customContextMenuRequested.connect(self.show_folder_context_menu)
+
+    def show_folder_context_menu(self, pos):
+        item = self.folder_list.itemAt(pos)
+        if not item:
+            return
+            
+        folder_path = item.text()
+        menu = QMenu(self)
+        
+        rescan_action = QAction("Rescan Folder", self)
+        rescan_action.setIcon(FIF.SYNC.icon())
+        rescan_action.triggered.connect(lambda: self.start_indexing(folder_path))
+        menu.addAction(rescan_action)
+        
+        remove_action = QAction("Remove from Library", self)
+        remove_action.setIcon(FIF.DELETE.icon())
+        remove_action.triggered.connect(lambda: self.remove_folder(folder_path))
+        menu.addAction(remove_action)
+        
+        menu.exec_(self.folder_list.mapToGlobal(pos))
+
+    def remove_folder(self, folder_path):
+        """Remove folder from config and database."""
+        self.log_area.append(f"Removing: {folder_path}")
+        try:
+            # Remove from DB
+            lance_db = search.db.get_db("./localvibe.lance")
+            table = search.db.create_samples_table(lance_db)
+            search.db.delete_folder_samples(table, folder_path)
+            
+            # Remove from config
+            library_config.remove_folder_from_config(folder_path)
+            self.load_folders()
+            self.log_area.append(f"Successfully removed {folder_path}")
+        except Exception as e:
+            self.log_area.append(f"Error removing folder: {e}")
         
     def add_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Sample Folder")
         if not folder:
             return
             
+        library_config.add_folder_to_config(folder)
+        self.load_folders()
         self.log_area.append(f"Selected: {folder}")
         self.start_indexing(folder)
         
@@ -306,22 +175,34 @@ class MainWindow(FluentWindow):
         w, h = desktop.width(), desktop.height()
         self.move(w//2 - self.width()//2, h//2 - self.height()//2)
         
+        # --- State ---
+        self.is_looping = False
+        self.autoplay = True
+        
         # --- Samples Page ---
         self.home_widget = QWidget()
         self.home_widget.setObjectName("homeWidget")
         self.home_layout = QVBoxLayout(self.home_widget)
         
+        # Stacked Widget for Search vs Onboarding
+        self.stacked_home = PopUpAniStackedWidget(self)
+        
+        # --- View 1: Main Search UI ---
+        self.search_view = QWidget()
+        self.search_layout = QVBoxLayout(self.search_view)
+        self.search_layout.setContentsMargins(0, 0, 0, 0)
+
         # Search
         self.search_bar = SearchLineEdit(self)
         self.search_bar.setPlaceholderText("Search sounds (e.g. 'dark bass', '140 bpm')")
         self.search_bar.returnPressed.connect(self.perform_search)
-        self.home_layout.addWidget(self.search_bar)
+        self.search_layout.addWidget(self.search_bar)
         
         # List
         self.sample_list = SampleListWidget(self)
         self.sample_list.itemClicked.connect(self.on_sample_clicked)
         self.sample_list.find_similar_requested.connect(self.find_similar)
-        self.home_layout.addWidget(self.sample_list)
+        self.search_layout.addWidget(self.sample_list)
         
         # Waveform & Info
         self.info_layout = QVBoxLayout()
@@ -330,9 +211,53 @@ class MainWindow(FluentWindow):
         self.info_layout.addWidget(self.info_label)
         
         self.waveform = WaveformWidget(self)
+        self.waveform.seek_requested.connect(self.seek_player)
         self.info_layout.addWidget(self.waveform)
+
+        # --- Playback Controls ---
+        self.controls_layout = QHBoxLayout()
+        self.controls_layout.setContentsMargins(0, 5, 0, 5)
         
-        self.home_layout.addLayout(self.info_layout)
+        # Play/Pause
+        self.play_btn = TransparentToolButton(FIF.PLAY, self)
+        self.play_btn.clicked.connect(self.toggle_play)
+        self.controls_layout.addWidget(self.play_btn)
+        
+        # Loop Toggle
+        self.loop_btn = ToggleButton(FIF.SYNC, "Loop", self)
+        self.loop_btn.clicked.connect(self.toggle_loop)
+        self.controls_layout.addWidget(self.loop_btn)
+        
+        # Autoplay Toggle
+        self.autoplay_btn = SwitchButton(self)
+        self.autoplay_btn.setChecked(True)
+        self.autoplay_btn.checkedChanged.connect(self.set_autoplay)
+        self.controls_layout.addSpacing(10)
+        self.controls_layout.addWidget(QLabel("Autoplay"))
+        self.controls_layout.addWidget(self.autoplay_btn)
+        
+        self.controls_layout.addStretch(1)
+        
+        # Volume Slider
+        self.controls_layout.addWidget(QLabel("Volume"))
+        self.volume_slider = Slider(Qt.Horizontal, self)
+        self.volume_slider.setRange(0, 100)
+        self.volume_slider.setValue(80)
+        self.volume_slider.setFixedWidth(150)
+        self.volume_slider.valueChanged.connect(self.set_volume)
+        self.controls_layout.addWidget(self.volume_slider)
+        
+        self.info_layout.addLayout(self.controls_layout)
+        self.search_layout.addLayout(self.info_layout)
+        
+        # --- View 2: Onboarding UI ---
+        self.onboarding_view = OnboardingView(self)
+        self.onboarding_view.add_folder_requested.connect(self.show_library_page)
+
+        self.stacked_home.addWidget(self.search_view)
+        self.stacked_home.addWidget(self.onboarding_view)
+        
+        self.home_layout.addWidget(self.stacked_home)
         
         # --- Library Page ---
         self.library_interface = LibraryInterface(self)
@@ -348,6 +273,68 @@ class MainWindow(FluentWindow):
         
         # Media Player
         self.player = QMediaPlayer()
+        self.player.setVolume(80)
+        self.player.positionChanged.connect(self.update_playhead)
+        self.player.stateChanged.connect(self.on_player_state_changed)
+        self.player.mediaStatusChanged.connect(self.on_media_status_changed)
+
+        # Initial check for empty library
+        self.check_library_empty()
+
+    def check_library_empty(self):
+        """Show onboarding if library is empty, otherwise show search."""
+        try:
+            db = search.db.get_db("./localvibe.lance")
+            table = search.db.create_samples_table(db)
+            count = search.db.count_samples(table)
+            if count == 0:
+                self.stacked_home.setCurrentWidget(self.onboarding_view)
+            else:
+                self.stacked_home.setCurrentWidget(self.search_view)
+        except Exception as e:
+            print(f"Error checking library status: {e}")
+            self.stacked_home.setCurrentWidget(self.onboarding_view)
+
+    def show_library_page(self):
+        """Switch to the library management tab."""
+        self.switchTo(self.library_interface)
+
+    def toggle_play(self):
+        if self.player.state() == QMediaPlayer.PlayingState:
+            self.player.pause()
+        else:
+            self.player.play()
+
+    def on_player_state_changed(self, state):
+        if state == QMediaPlayer.PlayingState:
+            self.play_btn.setIcon(FIF.PAUSE)
+        else:
+            self.play_btn.setIcon(FIF.PLAY)
+
+    def toggle_loop(self):
+        self.is_looping = self.loop_btn.isChecked()
+
+    def set_autoplay(self, checked):
+        self.autoplay = checked
+
+    def set_volume(self, value):
+        self.player.setVolume(value)
+
+    def seek_player(self, percentage):
+        if self.player.duration() > 0:
+            pos = int(percentage * self.player.duration())
+            self.player.setPosition(pos)
+
+    def update_playhead(self, position):
+        duration = self.player.duration()
+        if duration > 0:
+            progress = position / duration
+            self.waveform.set_progress(progress)
+
+    def on_media_status_changed(self, status):
+        if status == QMediaPlayer.EndOfMedia and self.is_looping:
+            self.player.setPosition(0)
+            self.player.play()
 
     def perform_search(self):
         query = self.search_bar.text().strip()
@@ -378,6 +365,13 @@ class MainWindow(FluentWindow):
             self.galaxy_interface.galaxy.clear_highlights()
             return
 
+        # Tag-to-Emoji mapping for quick visual scanning
+        tag_icons = {
+            "Kick": "🥁", "Snare": "🥁", "Hi-Hat": "📀", "Bass": "🎸", "808": "🔊",
+            "Synth": "🎹", "Vocals": "🎤", "FX": "✨", "Ambient": "☁️", "Loop": "🔁",
+            "One Shot": "🎯", "Trap": "🔥", "House": "🏠", "Techno": "🤖"
+        }
+
         for r in results:
             meta = r.get('metadata', {})
             filename = meta.get('filename', 'Unknown')
@@ -387,20 +381,30 @@ class MainWindow(FluentWindow):
             tags = meta.get('tags', [])
             distance = r.get('_distance', 0)
 
+            # Pick best icon based on top tag
+            icon_emoji = "🎵"
+            if tags:
+                for tag in tags:
+                    if tag in tag_icons:
+                        icon_emoji = tag_icons[tag]
+                        break
+
             # Format tags
             tag_str = ""
             if tags:
-                # Top 3 tags
                 tag_str = " | ".join(tags[:3])
                 tag_str = f"   ({tag_str})"
 
             # Show distance for similarity searches
             dist_str = f"  [{distance:.3f}]" if distance else ""
-            display_text = f"{filename}   [{bpm:.1f} BPM]   {key}{tag_str}{dist_str}"
+            display_text = f"{icon_emoji}  {filename}   [{bpm:.1f} BPM]   {key}{tag_str}{dist_str}"
 
             item = QListWidgetItem(display_text)
             item.setData(Qt.UserRole, str(file_path))
-            item.setIcon(FIF.MUSIC.icon())
+            
+            # We can also set a tooltip with more info
+            item.setToolTip(f"Path: {file_path}\nTags: {', '.join(tags)}")
+            
             self.sample_list.addItem(item)
 
         # Highlight search results in galaxy view

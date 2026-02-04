@@ -1,20 +1,26 @@
 import numpy as np
 import soundfile as sf
 from PyQt5.QtWidgets import QWidget
-from PyQt5.QtCore import Qt, QRectF
+from PyQt5.QtCore import Qt, QRectF, pyqtSignal
 from PyQt5.QtGui import QPainter, QColor, QBrush, QPen
 
 class WaveformWidget(QWidget):
+    seek_requested = pyqtSignal(float)  # Signal emitted with percentage (0.0 to 1.0)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.audio_path = None
         self.peaks = None
+        self.play_progress = 0.0  # 0.0 to 1.0
         self.setMinimumHeight(60)
         self.setFixedHeight(100)
+        self.setCursor(Qt.PointingHandCursor)
         
         # Style
         self.bar_color = QColor(0, 120, 215)  # Accent color
+        self.played_color = QColor(255, 255, 255, 150) # Highlight for played part
         self.bg_color = Qt.transparent
+        self.playhead_color = QColor(255, 255, 255)
         self.bar_width = 3
         self.bar_gap = 1
 
@@ -22,6 +28,7 @@ class WaveformWidget(QWidget):
         """Load audio file and calculate waveform peaks."""
         self.audio_path = file_path
         self.peaks = None
+        self.play_progress = 0.0
         
         try:
             # Read audio
@@ -37,21 +44,16 @@ class WaveformWidget(QWidget):
                 data = data / max_val
                 
             # Downsample for visualization
-            # We want roughly self.width() / (bar_width + gap) bars
-            # But width is dynamic. Let's compute a fixed number of bars for now
-            # or compute peaks based on a fixed resolution (e.g. 200 bars)
             num_bars = 200
             chunk_size = len(data) // num_bars
             if chunk_size < 1:
                 chunk_size = 1
                 
-            # Calculate RMS or max for each chunk
-            # Reshape into chunks (truncate leftover)
+            # Calculate max for each chunk
             num_chunks = len(data) // chunk_size
             data = data[:num_chunks * chunk_size]
             chunks = data.reshape(num_chunks, chunk_size)
             
-            # Use max amplitude per chunk
             self.peaks = np.max(np.abs(chunks), axis=1)
             
             self.update() # Trigger repaint
@@ -60,6 +62,17 @@ class WaveformWidget(QWidget):
             print(f"Error loading waveform: {e}")
             self.peaks = None
             self.update()
+
+    def set_progress(self, progress):
+        """Update the playhead position (0.0 to 1.0)."""
+        self.play_progress = max(0.0, min(1.0, progress))
+        self.update()
+
+    def mousePressEvent(self, event):
+        if self.peaks is not None:
+            progress = event.x() / self.width()
+            self.seek_requested.emit(progress)
+            self.set_progress(progress)
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -81,27 +94,33 @@ class WaveformWidget(QWidget):
         if count == 0:
             return
             
-        # Calculate bar width dynamically to fit width
-        # total_width = count * (bar_w + gap)
-        # We can stretch the bars to fit
         step = w / count
         bar_w = max(1, step - 1)
-        
-        painter.setBrush(QBrush(self.bar_color))
-        painter.setPen(Qt.NoPen)
         
         # Center line
         mid_y = h / 2
         
+        playhead_x = self.play_progress * w
+
         for i, peak in enumerate(self.peaks):
             x = i * step
-            # Height based on peak (0.0 to 1.0)
-            # Scale so max peak fills height
             bar_h = peak * h
-            
-            # Draw centered vertically
             y = mid_y - (bar_h / 2)
             
             rect = QRectF(x, y, bar_w, bar_h)
+            
+            # Color bars based on whether they've been played
+            if x < playhead_x:
+                painter.setBrush(QBrush(self.bar_color))
+            else:
+                painter.setBrush(QBrush(self.bar_color.lighter(150)))
+                painter.setOpacity(0.5)
+            
+            painter.setPen(Qt.NoPen)
             painter.drawRoundedRect(rect, 1, 1)
+            painter.setOpacity(1.0)
+
+        # Draw playhead
+        painter.setPen(QPen(self.playhead_color, 2))
+        painter.drawLine(int(playhead_x), 0, int(playhead_x), h)
 
