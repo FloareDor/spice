@@ -25,7 +25,169 @@ from onboarding import OnboardingView
 
 # --- Threads ---
 
-# ... (SearchThread, FindSimilarThread, IndexingThread remain same)
+class SearchThread(QThread):
+    results_ready = pyqtSignal(list, str)
+    status_update = pyqtSignal(str)
+
+    def __init__(self, query):
+        super().__init__()
+        self.query = query
+
+    def run(self):
+        try:
+            # Check if it's a file path or text
+            if os.path.exists(self.query):
+                results = search.search_by_audio(
+                    Path(self.query), 
+                    "./localvibe.lance", 
+                    limit=50,
+                    status_callback=self.status_update.emit
+                )
+            else:
+                results = search.search_by_text(
+                    self.query, 
+                    "./localvibe.lance", 
+                    limit=50,
+                    status_callback=self.status_update.emit
+                )
+            self.results_ready.emit(results, self.query)
+        except Exception as e:
+            print(f"Search error: {e}")
+            self.results_ready.emit([], self.query)
+
+class FindSimilarThread(QThread):
+    results_ready = pyqtSignal(list)
+    status_update = pyqtSignal(str)
+
+    def __init__(self, file_path):
+        super().__init__()
+        self.file_path = file_path
+
+    def run(self):
+        try:
+            self.status_update.emit(f"Finding samples similar to {os.path.basename(self.file_path)}...")
+            results = search.search_similar_to_sample(
+                self.file_path,
+                "./localvibe.lance",
+                limit=50
+            )
+            self.results_ready.emit(results)
+        except Exception as e:
+            print(f"Similarity search error: {e}")
+            self.results_ready.emit([])
+
+class IndexingThread(QThread):
+    progress_signal = pyqtSignal(int, int, str)
+    finished_signal = pyqtSignal(dict)
+
+    def __init__(self, folder):
+        super().__init__()
+        self.folder = folder
+
+    def run(self):
+        try:
+            stats = indexer.index_folder(
+                Path(self.folder),
+                progress_callback=self.progress_signal.emit
+            )
+            self.finished_signal.emit(stats)
+        except Exception as e:
+            print(f"Indexing error: {e}")
+            self.finished_signal.emit({})
+
+class SampleListWidget(ListWidget):
+    find_similar_requested = pyqtSignal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setDragEnabled(True)
+        self.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.customContextMenuRequested.connect(self.show_context_menu)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.drag_start_pos = event.pos()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if not (event.buttons() & Qt.LeftButton):
+            return
+        if (event.pos() - self.drag_start_pos).manhattanLength() < QApplication.startDragDistance():
+            return
+
+        item = self.currentItem()
+        if not item:
+            return
+
+        file_path = item.data(Qt.UserRole)
+        if not file_path or not os.path.exists(file_path):
+            return
+
+        drag = QDrag(self)
+        mime_data = QMimeData()
+        
+        # Enable dragging into DAWs (Ableton, FL Studio, etc.)
+        url = QUrl.fromLocalFile(file_path)
+        mime_data.setUrls([url])
+        drag.setMimeData(mime_data)
+        
+        # Set a nice drag icon if possible, or just use the emoji
+        drag.exec_(Qt.CopyAction)
+
+    def show_context_menu(self, pos):
+        item = self.itemAt(pos)
+        if not item:
+            return
+
+        file_path = item.data(Qt.UserRole)
+        if not file_path:
+            return
+
+        menu = QMenu(self)
+        
+        similar_action = QAction("Find Similar Samples", self)
+        similar_action.setIcon(FIF.SYNC.icon())
+        similar_action.triggered.connect(lambda: self.find_similar_requested.emit(file_path))
+        menu.addAction(similar_action)
+        
+        open_folder_action = QAction("Open in Explorer", self)
+        open_folder_action.setIcon(FIF.FOLDER.icon())
+        open_folder_action.triggered.connect(lambda: self.open_in_explorer(file_path))
+        menu.addAction(open_folder_action)
+        
+        menu.exec_(self.mapToGlobal(pos))
+
+    def open_in_explorer(self, file_path):
+        folder = os.path.dirname(file_path)
+        if os.path.exists(folder):
+            os.startfile(folder)
+
+class GalaxyInterface(QWidget):
+    sample_selected = pyqtSignal(dict)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.galaxy = GalaxyWidget(self)
+        self.galaxy.point_clicked.connect(self.sample_selected.emit)
+        layout.addWidget(self.galaxy)
+        
+        # Load data initially
+        self.refresh_data()
+
+    def refresh_data(self):
+        try:
+            db_conn = search.db.get_db("./localvibe.lance")
+            table = search.db.create_samples_table(db_conn)
+            self.galaxy.load_from_table(table)
+        except Exception as e:
+            print(f"Error loading galaxy: {e}")
+
+    def highlight_search_results(self, results):
+        paths = [r['metadata'].get('path') for r in results if 'metadata' in r]
+        self.galaxy.highlight_points(paths)
 
 class LibraryInterface(QWidget):
     def __init__(self, parent=None):
