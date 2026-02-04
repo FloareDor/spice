@@ -54,7 +54,15 @@ def create_samples_table(db: lancedb.DBConnection, table_name: str = "samples") 
     ])
 
     # Create empty table with schema
-    return db.create_table(table_name, schema=schema)
+    table = db.create_table(table_name, schema=schema)
+    
+    # Create vector index (IVF-PQ is default)
+    # This might fail on empty table, but LanceDB handles it gracefully usually or lazily
+    # Actually, standard practice is to index after data is loaded for optimal clusters,
+    # but creating it here ensures it's tracked.
+    # However, create_index usually requires some data to train the IVF centroids.
+    # So we'll skip creating it here on empty table to avoid errors.
+    return table
 
 
 def add_sample(
@@ -113,6 +121,13 @@ def add_samples_batch(table: lancedb.table.Table, samples: list[dict]) -> None:
 
     if records:
         table.add(records)
+        # Create index if table grows large enough (e.g. > 1000 rows)
+        # This is a naive check; for production, manage indexing separately.
+        # if table.count_rows() > 1000:
+        #     try:
+        #         table.create_index(metric="cosine")
+        #     except Exception:
+        #         pass
 
 
 def search_by_embedding(

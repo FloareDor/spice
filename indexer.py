@@ -21,6 +21,7 @@ from tqdm import tqdm
 import database as db
 from validate_core import analyze_audio
 import autotagger
+from model_wrapper import ModelWrapper
 
 # Supported audio extensions
 AUDIO_EXTENSIONS = {".wav", ".mp3", ".flac", ".ogg"}
@@ -44,74 +45,6 @@ def get_indexed_filenames(table) -> set[str]:
         return {r["filename"] for r in results}
     except Exception:
         return set()
-
-
-def run_clamp_batch(audio_files: list[Path], output_dir: Path) -> dict[str, np.ndarray]:
-    """
-    Run CLaMP 3 on a batch of audio files.
-
-    Returns:
-        Dict mapping filename -> 768-dim embedding
-    """
-    if not audio_files:
-        return {}
-
-    clamp_script = Path("clamp3/clamp3_embd.py").resolve()
-    if not clamp_script.exists():
-        raise FileNotFoundError(f"CLaMP 3 not found at {clamp_script}")
-
-    # Create temp input directory with all files
-    temp_input = output_dir / "clamp_batch_input"
-    temp_input.mkdir(exist_ok=True)
-
-    # Copy all audio files to temp input (preserving names)
-    for audio_file in audio_files:
-        dest = temp_input / audio_file.name
-        # Handle duplicate names by adding parent folder
-        if dest.exists():
-            dest = temp_input / f"{audio_file.parent.name}_{audio_file.name}"
-        shutil.copy(audio_file, dest)
-
-    temp_output = output_dir / "clamp_batch_output"
-    if temp_output.exists():
-        shutil.rmtree(temp_output)
-
-    # Run CLaMP 3
-    cmd = [
-        sys.executable,
-        str(clamp_script),
-        str(temp_input.resolve()),
-        str(temp_output.resolve()),
-        "--get_global"
-    ]
-
-    result = subprocess.run(
-        cmd,
-        cwd=str(clamp_script.parent),
-        capture_output=True,
-        text=True,
-    )
-
-    if result.returncode != 0:
-        print(f"CLaMP error: {result.stderr}")
-        raise RuntimeError(f"CLaMP extraction failed: {result.returncode}")
-
-    # Load all embeddings
-    embeddings = {}
-    for npy_file in temp_output.rglob("*.npy"):
-        embedding = np.load(npy_file)
-        if embedding.ndim > 1:
-            embedding = embedding.flatten()
-
-        # Map back to original filename
-        stem = npy_file.stem
-        embeddings[stem] = embedding
-
-    # Cleanup
-    shutil.rmtree(temp_input, ignore_errors=True)
-    shutil.rmtree(temp_output, ignore_errors=True)
-
-    return embeddings
 
 
 def analyze_audio_safe(audio_path: Path) -> dict:
@@ -182,9 +115,9 @@ def index_folder(
 
     print(f"Indexing {len(new_files)} new files...")
 
-    # Process in batches
-    temp_dir = Path(db_path).parent / ".indexer_temp"
-    temp_dir.mkdir(exist_ok=True)
+    # Initialize ModelWrapper (Loads MERT + CLaMP 3)
+    # This avoids reloading models for every batch
+    model = ModelWrapper(quantize=True)
 
     processed_count = 0
     try:
@@ -204,7 +137,7 @@ def index_folder(
                 progress_callback(processed_count, len(new_files), f"Extracting embeddings (Batch {batch_num})...")
             
             try:
-                embeddings = run_clamp_batch(batch_files, temp_dir)
+                embeddings = model.compute_embeddings(batch_files)
             except Exception as e:
                 print(f"  CLaMP batch failed: {e}")
                 stats["errors"] += len(batch_files)
@@ -222,7 +155,9 @@ def index_folder(
                     executor.submit(analyze_audio_safe, f): f
                     for f in batch_files
                 }
-                for future in tqdm(as_completed(futures), total=len(futures), desc="  Analyzing"):
+                # Disable tqdm if stderr is not available (e.g. in GUI)
+                disable_tqdm = sys.stderr is None
+                for future in tqdm(as_completed(futures), total=len(futures), desc="  Analyzing", disable=disable_tqdm):
                     audio_file = futures[future]
                     analyses[audio_file.name] = future.result()
 
@@ -230,14 +165,9 @@ def index_folder(
             samples = []
             for audio_file in batch_files:
                 filename = audio_file.name
-                stem = audio_file.stem
 
-                # Find embedding (handle name variations)
-                embedding = embeddings.get(stem)
-                if embedding is None:
-                    # Try with parent folder prefix
-                    alt_stem = f"{audio_file.parent.name}_{stem}"
-                    embedding = embeddings.get(alt_stem)
+                # Find embedding using full path key
+                embedding = embeddings.get(str(audio_file))
 
                 if embedding is None:
                     print(f"  Warning: No embedding for {filename}")
@@ -281,8 +211,8 @@ def index_folder(
                 progress_callback(processed_count, len(new_files), f"Completed Batch {batch_num}")
 
     finally:
-        # Cleanup temp directory
-        shutil.rmtree(temp_dir, ignore_errors=True)
+        # Cleanup
+        pass
 
     return stats
 

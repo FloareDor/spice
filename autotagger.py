@@ -25,78 +25,29 @@ TAGS = [
 
 TAG_EMBEDDINGS_FILE = "tag_embeddings.npy"
 
+from model_wrapper import ModelWrapper
+
 def generate_tag_embeddings(output_file: str = TAG_EMBEDDINGS_FILE):
     """
     Generate embeddings for all tags using CLaMP 3 and save to file.
     """
     print("Generating tag embeddings...")
-    clamp_script = Path("clamp3/clamp3_embd.py").resolve()
-    if not clamp_script.exists():
-        raise FileNotFoundError(f"CLaMP 3 not found at {clamp_script}")
-
-    temp_dir = Path(".tag_gen_temp")
-    temp_dir.mkdir(exist_ok=True)
     
-    temp_input = temp_dir / "input"
-    temp_input.mkdir(exist_ok=True)
-    temp_output = temp_dir / "output"
+    # Initialize ModelWrapper (will reuse existing weights/code)
+    model = ModelWrapper(quantize=True)
     
-    # Create a text file for each tag
-    # CLaMP script expects input files. For text, it might expect .txt
-    # We will use the same method as search.py: write text files
+    embeddings = {}
     
-    tag_map = {} # filename -> tag
+    # Generate embeddings
+    # Process in batches if list is huge, but here it's small (~20 tags)
+    vectors = model.compute_text_embeddings(TAGS)
     
-    for i, tag in enumerate(TAGS):
-        safe_tag = "".join([c if c.isalnum() else "_" for c in tag])
-        fname = f"{i:03d}_{safe_tag}.txt"
-        with open(temp_input / fname, "w", encoding="utf-8") as f:
-            f.write(tag)
-        tag_map[fname] = tag
-
-    # Run CLaMP
-    cmd = [
-        sys.executable,
-        str(clamp_script),
-        str(temp_input.resolve()),
-        str(temp_output.resolve()),
-        "--get_global"
-    ]
-
-    result = subprocess.run(
-        cmd,
-        cwd=str(clamp_script.parent),
-        capture_output=True,
-        text=True,
-    )
-
-    if result.returncode != 0:
-        print(result.stderr)
-        raise RuntimeError(f"CLaMP failed: {result.returncode}")
-
-    # Collect embeddings
-    embeddings = {} # tag -> vector
-    
-    for npy_file in temp_output.rglob("*.npy"):
-        stem = npy_file.stem
-        # clamp script might rename files slightly or keep stem
-        # We need to map back to tag. 
-        # The script outputs {filename}.npy
-        
-        # Find original tag
-        original_fname = f"{stem}.txt"
-        if original_fname in tag_map:
-            tag = tag_map[original_fname]
-            vec = np.load(npy_file)
-            if vec.ndim > 1:
-                vec = vec.flatten()
-            embeddings[tag] = vec
+    for tag, vec in zip(TAGS, vectors):
+        embeddings[tag] = vec
     
     # Save as dictionary
     np.save(output_file, embeddings)
     
-    # Cleanup
-    shutil.rmtree(temp_dir, ignore_errors=True)
     print(f"Saved {len(embeddings)} tag embeddings to {output_file}")
     return embeddings
 

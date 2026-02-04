@@ -12,7 +12,11 @@ Activate venv first:
 """
 import argparse
 import sys
+import warnings
 from pathlib import Path
+
+# Filter librosa/scikit-learn warnings about n_fft being too large for short audio
+warnings.filterwarnings("ignore", category=UserWarning, module="librosa")
 
 try:
     import librosa

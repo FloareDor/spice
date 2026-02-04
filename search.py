@@ -23,6 +23,7 @@ from pathlib import Path
 import numpy as np
 
 import database as db
+from model_wrapper import ModelWrapper
 
 # Default database path
 DEFAULT_DB = "./localvibe.lance"
@@ -146,98 +147,29 @@ def filter_results(
 
 
 def get_audio_embedding(audio_path: Path, temp_dir: Path) -> np.ndarray:
-    """Extract CLaMP 3 embedding from audio file."""
-    clamp_script = Path("clamp3/clamp3_embd.py").resolve()
-    if not clamp_script.exists():
-        raise FileNotFoundError(f"CLaMP 3 not found at {clamp_script}")
-
-    temp_input = temp_dir / "search_input"
-    temp_input.mkdir(exist_ok=True)
-    shutil.copy(audio_path, temp_input / audio_path.name)
-
-    temp_output = temp_dir / "search_output"
-    if temp_output.exists():
-        shutil.rmtree(temp_output)
-
-    cmd = [
-        sys.executable,
-        str(clamp_script),
-        str(temp_input.resolve()),
-        str(temp_output.resolve()),
-        "--get_global"
-    ]
-
-    result = subprocess.run(
-        cmd,
-        cwd=str(clamp_script.parent),
-        capture_output=True,
-        text=True,
-    )
-
-    if result.returncode != 0:
-        raise RuntimeError(f"CLaMP extraction failed: {result.stderr}")
-
-    npy_files = list(temp_output.rglob("*.npy"))
-    if not npy_files:
-        raise FileNotFoundError("No embedding generated")
-
-    embedding = np.load(npy_files[0])
-    if embedding.ndim > 1:
-        embedding = embedding.flatten()
-
-    shutil.rmtree(temp_input, ignore_errors=True)
-    shutil.rmtree(temp_output, ignore_errors=True)
-
-    return embedding
+    """Extract CLaMP 3 embedding from audio file using ModelWrapper."""
+    # Note: temp_dir is unused but kept for signature compatibility if needed, 
+    # though we can remove it. The caller creates it.
+    
+    # Initialize wrapper (optimizes load time via quantization)
+    model = ModelWrapper(quantize=True)
+    
+    results = model.compute_embeddings([audio_path])
+    if str(audio_path) in results:
+        return results[str(audio_path)]
+        
+    raise RuntimeError("Failed to generate embedding")
 
 
 def get_text_embedding(text: str, temp_dir: Path) -> np.ndarray:
-    """Extract CLaMP 3 embedding from text description."""
-    clamp_script = Path("clamp3/clamp3_embd.py").resolve()
-    if not clamp_script.exists():
-        raise FileNotFoundError(f"CLaMP 3 not found at {clamp_script}")
-
-    temp_input = temp_dir / "search_text_input"
-    temp_input.mkdir(exist_ok=True)
-
-    # Write text to a .txt file
-    text_file = temp_input / "query.txt"
-    text_file.write_text(text, encoding="utf-8")
-
-    temp_output = temp_dir / "search_text_output"
-    if temp_output.exists():
-        shutil.rmtree(temp_output)
-
-    cmd = [
-        sys.executable,
-        str(clamp_script),
-        str(temp_input.resolve()),
-        str(temp_output.resolve()),
-        "--get_global"
-    ]
-
-    result = subprocess.run(
-        cmd,
-        cwd=str(clamp_script.parent),
-        capture_output=True,
-        text=True,
-    )
-
-    if result.returncode != 0:
-        raise RuntimeError(f"CLaMP extraction failed: {result.stderr}")
-
-    npy_files = list(temp_output.rglob("*.npy"))
-    if not npy_files:
-        raise FileNotFoundError("No embedding generated")
-
-    embedding = np.load(npy_files[0])
-    if embedding.ndim > 1:
-        embedding = embedding.flatten()
-
-    shutil.rmtree(temp_input, ignore_errors=True)
-    shutil.rmtree(temp_output, ignore_errors=True)
-
-    return embedding
+    """Extract CLaMP 3 embedding from text description using ModelWrapper."""
+    model = ModelWrapper(quantize=True)
+    
+    embeddings = model.compute_text_embeddings([text])
+    if embeddings:
+        return embeddings[0]
+        
+    raise RuntimeError("Failed to generate text embedding")
 
 
 def search_by_audio(
