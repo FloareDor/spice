@@ -15,7 +15,6 @@ qfluentwidgets_data = collect_data_files('qfluentwidgets')
 added_files = [
     (os.path.join(base_dir, 'clamp3'), 'clamp3'),
     (os.path.join(base_dir, 'tag_embeddings.npy'), '.'),
-    (os.path.join(base_dir, 'library_config.json'), '.'),
 ] + qfluentwidgets_data
 
 a = Analysis(

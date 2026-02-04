@@ -1,11 +1,22 @@
 import json
 import os
+import sys
 from pathlib import Path
 
-CONFIG_FILE = "library_config.json"
+# Get stable user directory
+if sys.platform == "win32":
+    APP_DATA = Path(os.getenv('LOCALAPPDATA')) / "LocalVibe"
+else:
+    APP_DATA = Path.home() / ".local" / "share" / "LocalVibe"
+
+APP_DATA.mkdir(parents=True, exist_ok=True)
+
+# Update paths to use this directory
+CONFIG_FILE = APP_DATA / "library_config.json"
+DB_PATH = APP_DATA / "localvibe.lance"
 
 def load_config():
-    if not os.path.exists(CONFIG_FILE):
+    if not CONFIG_FILE.exists():
         return {"folders": []}
     try:
         with open(CONFIG_FILE, "r") as f:

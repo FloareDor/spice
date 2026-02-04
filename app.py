@@ -39,14 +39,14 @@ class SearchThread(QThread):
             if os.path.exists(self.query):
                 results = search.search_by_audio(
                     Path(self.query), 
-                    "./localvibe.lance", 
+                    str(library_config.DB_PATH), 
                     limit=50,
                     status_callback=self.status_update.emit
                 )
             else:
                 results = search.search_by_text(
                     self.query, 
-                    "./localvibe.lance", 
+                    str(library_config.DB_PATH), 
                     limit=50,
                     status_callback=self.status_update.emit
                 )
@@ -68,7 +68,7 @@ class FindSimilarThread(QThread):
             self.status_update.emit(f"Finding samples similar to {os.path.basename(self.file_path)}...")
             results = search.search_similar_to_sample(
                 self.file_path,
-                "./localvibe.lance",
+                str(library_config.DB_PATH),
                 limit=50
             )
             self.results_ready.emit(results)
@@ -179,7 +179,7 @@ class GalaxyInterface(QWidget):
 
     def refresh_data(self):
         try:
-            db_conn = search.db.get_db("./localvibe.lance")
+            db_conn = search.db.get_db(str(library_config.DB_PATH))
             table = search.db.create_samples_table(db_conn)
             self.galaxy.load_from_table(table)
         except Exception as e:
@@ -270,7 +270,7 @@ class LibraryInterface(QWidget):
         self.log_area.append(f"Removing: {folder_path}")
         try:
             # Remove from DB
-            lance_db = search.db.get_db("./localvibe.lance")
+            lance_db = search.db.get_db(str(library_config.DB_PATH))
             table = search.db.create_samples_table(lance_db)
             search.db.delete_folder_samples(table, folder_path)
             
@@ -446,7 +446,7 @@ class MainWindow(FluentWindow):
     def check_library_empty(self):
         """Show onboarding if library is empty, otherwise show search."""
         try:
-            db = search.db.get_db("./localvibe.lance")
+            db = search.db.get_db(str(library_config.DB_PATH))
             table = search.db.create_samples_table(db)
             count = search.db.count_samples(table)
             if count == 0:
