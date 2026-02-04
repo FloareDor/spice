@@ -7,6 +7,7 @@ import numpy as np
 from pathlib import Path
 from tqdm import tqdm
 from transformers import AutoTokenizer, BertConfig
+from typing import Callable, Optional
 
 # Add CLaMP 3 paths to sys.path
 CURRENT_DIR = Path(__file__).parent
@@ -16,76 +17,179 @@ CLAMP_AUDIO_DIR = CURRENT_DIR / "clamp3" / "preprocessing" / "audio"
 sys.path.append(str(CLAMP_CODE_DIR))
 sys.path.append(str(CLAMP_AUDIO_DIR))
 
-# Now import CLaMP modules
-# We need to wrap these imports in try-except blocks or handle potential import errors gracefully
-# but given the strict dependency list, they should exist.
-try:
+# Lazy imports - will be done when models are actually loaded
+_clamp_modules_loaded = False
+AUDIO_HIDDEN_SIZE = None
+AUDIO_NUM_LAYERS = None
+MAX_AUDIO_LENGTH = None
+M3_HIDDEN_SIZE = None
+PATCH_NUM_LAYERS = None
+PATCH_LENGTH = None
+CLAMP3_HIDDEN_SIZE = None
+CLAMP3_LOAD_M3 = None
+TEXT_MODEL_NAME = None
+CLAMP3_WEIGHTS_PATH = None
+CLaMP3Model = None
+HuBERTFeature = None
+load_audio = None
+
+
+def _load_clamp_modules():
+    """Lazy load CLaMP modules on first use."""
+    global _clamp_modules_loaded
+    global AUDIO_HIDDEN_SIZE, AUDIO_NUM_LAYERS, MAX_AUDIO_LENGTH
+    global M3_HIDDEN_SIZE, PATCH_NUM_LAYERS, PATCH_LENGTH
+    global CLAMP3_HIDDEN_SIZE, CLAMP3_LOAD_M3, TEXT_MODEL_NAME, CLAMP3_WEIGHTS_PATH
+    global CLaMP3Model, HuBERTFeature, load_audio
+
+    if _clamp_modules_loaded:
+        return
+
     from config import (
-        AUDIO_HIDDEN_SIZE, AUDIO_NUM_LAYERS, MAX_AUDIO_LENGTH,
-        M3_HIDDEN_SIZE, PATCH_NUM_LAYERS, PATCH_LENGTH,
-        CLAMP3_HIDDEN_SIZE, CLAMP3_LOAD_M3, TEXT_MODEL_NAME,
-        CLAMP3_WEIGHTS_PATH
+        AUDIO_HIDDEN_SIZE as _AUDIO_HIDDEN_SIZE,
+        AUDIO_NUM_LAYERS as _AUDIO_NUM_LAYERS,
+        MAX_AUDIO_LENGTH as _MAX_AUDIO_LENGTH,
+        M3_HIDDEN_SIZE as _M3_HIDDEN_SIZE,
+        PATCH_NUM_LAYERS as _PATCH_NUM_LAYERS,
+        PATCH_LENGTH as _PATCH_LENGTH,
+        CLAMP3_HIDDEN_SIZE as _CLAMP3_HIDDEN_SIZE,
+        CLAMP3_LOAD_M3 as _CLAMP3_LOAD_M3,
+        TEXT_MODEL_NAME as _TEXT_MODEL_NAME,
+        CLAMP3_WEIGHTS_PATH as _CLAMP3_WEIGHTS_PATH
     )
-    # We import CLaMP3Model from utils because that's where we found it defined in the previous step
-    from utils import CLaMP3Model 
-    from hf_pretrains import HuBERTFeature
-    from MERT_utils import load_audio
-except ImportError as e:
-    print(f"Error importing CLaMP 3 modules: {e}")
-    # Fallback or exit? For now, we'll let it fail loudly if modules are missing.
-    raise
+    from utils import CLaMP3Model as _CLaMP3Model
+    from hf_pretrains import HuBERTFeature as _HuBERTFeature
+    from MERT_utils import load_audio as _load_audio
+
+    AUDIO_HIDDEN_SIZE = _AUDIO_HIDDEN_SIZE
+    AUDIO_NUM_LAYERS = _AUDIO_NUM_LAYERS
+    MAX_AUDIO_LENGTH = _MAX_AUDIO_LENGTH
+    M3_HIDDEN_SIZE = _M3_HIDDEN_SIZE
+    PATCH_NUM_LAYERS = _PATCH_NUM_LAYERS
+    PATCH_LENGTH = _PATCH_LENGTH
+    CLAMP3_HIDDEN_SIZE = _CLAMP3_HIDDEN_SIZE
+    CLAMP3_LOAD_M3 = _CLAMP3_LOAD_M3
+    TEXT_MODEL_NAME = _TEXT_MODEL_NAME
+    CLAMP3_WEIGHTS_PATH = _CLAMP3_WEIGHTS_PATH
+    CLaMP3Model = _CLaMP3Model
+    HuBERTFeature = _HuBERTFeature
+    load_audio = _load_audio
+
+    _clamp_modules_loaded = True
+
+
+# Singleton instance
+_model_instance: Optional["ModelWrapper"] = None
+
+
+def get_model(
+    quantize: bool = True,
+    status_callback: Optional[Callable[[str], None]] = None
+) -> "ModelWrapper":
+    """
+    Get the singleton ModelWrapper instance, loading models lazily on first call.
+
+    Args:
+        quantize: Whether to apply int8 quantization (CPU only)
+        status_callback: Optional callback for status updates (e.g., "Loading MERT...")
+
+    Returns:
+        The shared ModelWrapper instance
+    """
+    global _model_instance
+
+    if _model_instance is None:
+        _model_instance = ModelWrapper(quantize=quantize, status_callback=status_callback)
+
+    return _model_instance
+
 
 class ModelWrapper:
     """
     Wraps MERT and CLaMP 3 models for efficient inference without subprocess overhead.
+    Uses lazy loading - models are only loaded on first use.
     """
-    def __init__(self, device: str = None, quantize: bool = True):
+    def __init__(
+        self,
+        device: str = None,
+        quantize: bool = True,
+        status_callback: Optional[Callable[[str], None]] = None
+    ):
         self.device = device if device else ("cuda" if torch.cuda.is_available() else "cpu")
-        self.quantize = quantize and (self.device == "cpu") # Quantization is mostly for CPU speedup
-        
-        print(f"Initializing models on {self.device} (Quantization: {self.quantize})...")
-        
-        # 1. Load MERT Feature Extractor
-        self._load_mert()
-        
-        # 2. Load CLaMP 3 Model
-        self._load_clamp()
+        self.quantize = quantize and (self.device == "cpu")
+        self.status_callback = status_callback or (lambda msg: print(msg))
+
+        # Lazy loading flags
+        self._mert_loaded = False
+        self._clamp_loaded = False
+        self._modules_loaded = False
+
+        # Model references (loaded lazily)
+        self.feature_extractor = None
+        self.clamp_model = None
+        self.tokenizer = None
+        self.mert_model_path = "m-a-p/MERT-v1-95M"
+
+    def _ensure_modules(self):
+        """Ensure CLaMP modules are imported."""
+        if not self._modules_loaded:
+            self.status_callback("Loading CLaMP modules...")
+            _load_clamp_modules()
+            self._modules_loaded = True
+
+    def _ensure_mert(self):
+        """Ensure MERT model is loaded (lazy loading)."""
+        if not self._mert_loaded:
+            self._ensure_modules()
+            self._load_mert()
+            self._mert_loaded = True
+
+    def _ensure_clamp(self):
+        """Ensure CLaMP model is loaded (lazy loading)."""
+        if not self._clamp_loaded:
+            self._ensure_modules()
+            self._load_clamp()
+            self._clamp_loaded = True
+
+    def is_loaded(self) -> bool:
+        """Check if models are loaded."""
+        return self._mert_loaded and self._clamp_loaded
 
     def _load_mert(self):
         """Initialize MERT model for audio feature extraction."""
-        print("Loading MERT-v1-95M...")
-        self.mert_model_path = "m-a-p/MERT-v1-95M" # Hardcoded in original script
+        self.status_callback("Loading MERT-v1-95M (audio feature extractor)...")
         self.feature_extractor = HuBERTFeature(
             self.mert_model_path,
-            24000, # target_sr
+            24000,  # target_sr
             force_half=False,
             processor_normalize=True,
         )
         self.feature_extractor.to(self.device)
         self.feature_extractor.eval()
+        self.status_callback("MERT loaded.")
 
     def _load_clamp(self):
         """Initialize CLaMP 3 model."""
-        print("Loading CLaMP 3...")
-        
+        self.status_callback("Loading CLaMP 3 (semantic embeddings)...")
+
         # Config setup (mirrored from extract_clamp3.py)
         audio_config = BertConfig(
             vocab_size=1,
             hidden_size=AUDIO_HIDDEN_SIZE,
             num_hidden_layers=AUDIO_NUM_LAYERS,
-            num_attention_heads=AUDIO_HIDDEN_SIZE//64,
-            intermediate_size=AUDIO_HIDDEN_SIZE*4,
+            num_attention_heads=AUDIO_HIDDEN_SIZE // 64,
+            intermediate_size=AUDIO_HIDDEN_SIZE * 4,
             max_position_embeddings=MAX_AUDIO_LENGTH
         )
         symbolic_config = BertConfig(
             vocab_size=1,
             hidden_size=M3_HIDDEN_SIZE,
             num_hidden_layers=PATCH_NUM_LAYERS,
-            num_attention_heads=M3_HIDDEN_SIZE//64,
-            intermediate_size=M3_HIDDEN_SIZE*4,
+            num_attention_heads=M3_HIDDEN_SIZE // 64,
+            intermediate_size=M3_HIDDEN_SIZE * 4,
             max_position_embeddings=PATCH_LENGTH
         )
-        
+
         self.clamp_model = CLaMP3Model(
             audio_config=audio_config,
             symbolic_config=symbolic_config,
@@ -95,28 +199,31 @@ class ModelWrapper:
         )
         self.clamp_model.to(self.device)
         self.clamp_model.eval()
-        
+
         # Load Tokenizer for text
+        self.status_callback("Loading tokenizer...")
         self.tokenizer = AutoTokenizer.from_pretrained(TEXT_MODEL_NAME)
 
         # Download weights if missing
         checkpoint_path = CLAMP_CODE_DIR / CLAMP3_WEIGHTS_PATH
         if not checkpoint_path.exists():
-            print("CLaMP 3 weights not found. Downloading...")
+            self.status_callback("Downloading CLaMP 3 weights...")
             self._download_weights(checkpoint_path)
-            
-        print(f"Loading weights from {checkpoint_path}")
+
+        self.status_callback("Loading CLaMP 3 weights...")
         checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
         self.clamp_model.load_state_dict(checkpoint['model'])
 
         # Dynamic Quantization (CPU Only)
         if self.quantize:
-            print("Applying dynamic quantization to CLaMP 3...")
+            self.status_callback("Applying int8 quantization...")
             self.clamp_model = torch.quantization.quantize_dynamic(
                 self.clamp_model,
                 {torch.nn.Linear},
                 dtype=torch.qint8
             )
+
+        self.status_callback("CLaMP 3 loaded.")
 
     def _download_weights(self, path: Path):
         url = "https://huggingface.co/sander-wood/clamp3/resolve/main/weights_clamp3_saas_h_size_768_t_model_FacebookAI_xlm-roberta-base_t_length_128_a_size_768_a_layers_12_a_length_128_s_size_768_s_layers_12_p_size_64_p_length_512.pth"
@@ -141,8 +248,11 @@ class ModelWrapper:
         Compute CLaMP 3 embeddings for a list of text strings.
         Returns a list of 768-dim numpy arrays.
         """
+        # Ensure CLaMP is loaded (lazy loading)
+        self._ensure_clamp()
+
         embeddings = []
-        MAX_TEXT_LENGTH = 128 # from config
+        MAX_TEXT_LENGTH = 128  # from config
         
         for text in texts:
             try:
@@ -199,8 +309,12 @@ class ModelWrapper:
         Compute CLaMP 3 embeddings for a list of audio files.
         Returns a dict mapping filename -> embedding (numpy array).
         """
+        # Ensure models are loaded (lazy loading)
+        self._ensure_mert()
+        self._ensure_clamp()
+
         results = {}
-        
+
         # Processing parameters
         target_sr = 24000
         # From extract_clamp3.py logic

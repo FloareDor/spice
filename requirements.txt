@@ -25,5 +25,8 @@ lancedb>=0.5.0
 PyQt5
 PyQt-Fluent-Widgets
 
+# Phase 4: Galaxy Map Visualization
+umap-learn>=0.5.0
+
 # Packaging
 pyinstaller

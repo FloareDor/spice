@@ -14,16 +14,13 @@ Activate venv first:
     .\\venv\\Scripts\\activate
 """
 import argparse
-import re
-import shutil
-import subprocess
 import sys
 from pathlib import Path
 
 import numpy as np
 
 import database as db
-from model_wrapper import ModelWrapper
+from model_wrapper import get_model
 
 # Default database path
 DEFAULT_DB = "./localvibe.lance"
@@ -146,29 +143,33 @@ def filter_results(
     return filtered
 
 
-def get_audio_embedding(audio_path: Path, temp_dir: Path) -> np.ndarray:
-    """Extract CLaMP 3 embedding from audio file using ModelWrapper."""
-    # Note: temp_dir is unused but kept for signature compatibility if needed, 
-    # though we can remove it. The caller creates it.
-    
-    # Initialize wrapper (optimizes load time via quantization)
-    model = ModelWrapper(quantize=True)
-    
+def get_audio_embedding(
+    audio_path: Path,
+    temp_dir: Path = None,
+    status_callback=None
+) -> np.ndarray:
+    """Extract CLaMP 3 embedding from audio file using shared ModelWrapper."""
+    model = get_model(quantize=True, status_callback=status_callback)
+
     results = model.compute_embeddings([audio_path])
     if str(audio_path) in results:
         return results[str(audio_path)]
-        
+
     raise RuntimeError("Failed to generate embedding")
 
 
-def get_text_embedding(text: str, temp_dir: Path) -> np.ndarray:
-    """Extract CLaMP 3 embedding from text description using ModelWrapper."""
-    model = ModelWrapper(quantize=True)
-    
+def get_text_embedding(
+    text: str,
+    temp_dir: Path = None,
+    status_callback=None
+) -> np.ndarray:
+    """Extract CLaMP 3 embedding from text description using shared ModelWrapper."""
+    model = get_model(quantize=True, status_callback=status_callback)
+
     embeddings = model.compute_text_embeddings([text])
     if embeddings:
         return embeddings[0]
-        
+
     raise RuntimeError("Failed to generate text embedding")
 
 
@@ -178,28 +179,27 @@ def search_by_audio(
     limit: int,
     bpm_range: tuple[float, float] | None = None,
     key_filter: tuple[str | None, str | None] | None = None,
+    status_callback=None,
 ) -> list[dict]:
     """Search for samples similar to an audio file."""
-    temp_dir = Path(".search_temp")
-    temp_dir.mkdir(exist_ok=True)
-
-    try:
+    if status_callback:
+        status_callback(f"Extracting embedding from {audio_path.name}...")
+    else:
         print(f"Extracting embedding from {audio_path.name}...")
-        embedding = get_audio_embedding(audio_path, temp_dir)
 
-        lance_db = db.get_db(db_path)
-        table = db.create_samples_table(lance_db)
+    embedding = get_audio_embedding(audio_path, status_callback=status_callback)
 
-        # Fetch more results if filtering, then trim
-        fetch_limit = limit * 5 if (bpm_range or key_filter) else limit
-        results = db.search_by_embedding(table, embedding, limit=fetch_limit)
+    lance_db = db.get_db(db_path)
+    table = db.create_samples_table(lance_db)
 
-        if bpm_range or key_filter:
-            results = filter_results(results, bpm_range, key_filter)
+    # Fetch more results if filtering, then trim
+    fetch_limit = limit * 5 if (bpm_range or key_filter) else limit
+    results = db.search_by_embedding(table, embedding, limit=fetch_limit)
 
-        return results[:limit]
-    finally:
-        shutil.rmtree(temp_dir, ignore_errors=True)
+    if bpm_range or key_filter:
+        results = filter_results(results, bpm_range, key_filter)
+
+    return results[:limit]
 
 
 def search_by_text(
@@ -208,28 +208,71 @@ def search_by_text(
     limit: int,
     bpm_range: tuple[float, float] | None = None,
     key_filter: tuple[str | None, str | None] | None = None,
+    status_callback=None,
 ) -> list[dict]:
     """Search for samples matching a text description."""
-    temp_dir = Path(".search_temp")
-    temp_dir.mkdir(exist_ok=True)
-
-    try:
+    if status_callback:
+        status_callback(f"Generating embedding for: \"{text}\"...")
+    else:
         print(f"Generating embedding for: \"{text}\"...")
-        embedding = get_text_embedding(text, temp_dir)
 
-        lance_db = db.get_db(db_path)
-        table = db.create_samples_table(lance_db)
+    embedding = get_text_embedding(text, status_callback=status_callback)
 
-        # Fetch more results if filtering, then trim
-        fetch_limit = limit * 5 if (bpm_range or key_filter) else limit
-        results = db.search_by_embedding(table, embedding, limit=fetch_limit)
+    lance_db = db.get_db(db_path)
+    table = db.create_samples_table(lance_db)
 
-        if bpm_range or key_filter:
-            results = filter_results(results, bpm_range, key_filter)
+    # Fetch more results if filtering, then trim
+    fetch_limit = limit * 5 if (bpm_range or key_filter) else limit
+    results = db.search_by_embedding(table, embedding, limit=fetch_limit)
 
-        return results[:limit]
-    finally:
-        shutil.rmtree(temp_dir, ignore_errors=True)
+    if bpm_range or key_filter:
+        results = filter_results(results, bpm_range, key_filter)
+
+    return results[:limit]
+
+
+def search_similar_to_sample(
+    file_path: str,
+    db_path: str,
+    limit: int,
+    bpm_range: tuple[float, float] | None = None,
+    key_filter: tuple[str | None, str | None] | None = None,
+) -> list[dict]:
+    """
+    Search for samples similar to an already-indexed sample.
+    Uses the stored embedding instead of recomputing.
+
+    Args:
+        file_path: Full path to the sample (as stored in metadata)
+        db_path: Path to LanceDB database
+        limit: Max results to return
+        bpm_range: Optional BPM filter
+        key_filter: Optional key filter
+
+    Returns:
+        List of similar samples (excluding the query sample itself)
+    """
+    lance_db = db.get_db(db_path)
+    table = db.create_samples_table(lance_db)
+
+    # Get the sample's stored embedding
+    sample = db.get_sample(table, Path(file_path).name)
+    if sample is None:
+        raise ValueError(f"Sample not found in database: {file_path}")
+
+    embedding = sample["embedding"]
+
+    # Search for similar (fetch extra to account for filtering + excluding self)
+    fetch_limit = (limit + 1) * 5 if (bpm_range or key_filter) else limit + 1
+    results = db.search_by_embedding(table, embedding, limit=fetch_limit)
+
+    # Filter out the query sample itself
+    results = [r for r in results if r["metadata"].get("path") != file_path]
+
+    if bpm_range or key_filter:
+        results = filter_results(results, bpm_range, key_filter)
+
+    return results[:limit]
 
 
 def list_samples(
