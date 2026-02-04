@@ -25,7 +25,7 @@ TAGS = [
 
 TAG_EMBEDDINGS_FILE = "tag_embeddings.npy"
 
-from model_wrapper import ModelWrapper
+from .model_wrapper import ModelWrapper
 
 def generate_tag_embeddings(output_file: str = TAG_EMBEDDINGS_FILE):
     """

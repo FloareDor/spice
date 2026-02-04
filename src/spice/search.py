@@ -19,8 +19,8 @@ from pathlib import Path
 
 import numpy as np
 
-import database as db
-from model_wrapper import get_model
+from . import database as db
+from .model_wrapper import get_model
 
 # Default database path
 DEFAULT_DB = "./localvibe.lance"

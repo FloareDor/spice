@@ -17,7 +17,10 @@ import numpy as np
 import soundfile as sf
 
 # Import our database module
-import database as db
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+from spice import database as db
 
 
 def generate_test_audio(filename: str = "test_audio.wav", duration: float = 5.0) -> str:

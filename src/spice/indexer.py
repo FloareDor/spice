@@ -18,10 +18,10 @@ from pathlib import Path
 import numpy as np
 from tqdm import tqdm
 
-import database as db
-from validate_core import analyze_audio
-import autotagger
-from model_wrapper import ModelWrapper
+from . import database as db
+from .audio_analysis import analyze_audio
+from . import autotagger
+from .model_wrapper import ModelWrapper
 
 # Supported audio extensions
 AUDIO_EXTENSIONS = {".wav", ".mp3", ".flac", ".ogg"}

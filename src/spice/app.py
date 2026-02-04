@@ -16,12 +16,12 @@ from qfluentwidgets import (
     SwitchButton, ToggleButton, TransparentToolButton, PopUpAniStackedWidget
 )
 
-import search
-import indexer
-import library_config
-from waveform import WaveformWidget
-from galaxy import GalaxyWidget
-from onboarding import OnboardingView
+from . import search
+from . import indexer
+from . import library_config
+from .waveform import WaveformWidget
+from .galaxy import GalaxyWidget
+from .onboarding import OnboardingView
 
 # --- Threads ---
 
@@ -622,11 +622,14 @@ class MainWindow(FluentWindow):
         self.player.setMedia(content)
         self.player.play()
 
-if __name__ == "__main__":
+def main():
     os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
     os.environ["QT_SCALE_FACTOR"] = "1"
-    
+
     app = QApplication(sys.argv)
     w = MainWindow()
     w.show()
     sys.exit(app.exec_())
+
+if __name__ == "__main__":
+    main()

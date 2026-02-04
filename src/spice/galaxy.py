@@ -11,7 +11,7 @@ from PyQt5.QtCore import Qt, QThread, pyqtSignal, QPointF, QRectF
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel
 from PyQt5.QtGui import QPainter, QColor, QPen, QBrush, QFont, QWheelEvent, QMouseEvent
 
-import database as db
+from . import database as db
 
 
 class UMAPThread(QThread):
