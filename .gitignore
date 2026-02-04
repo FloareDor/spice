@@ -1,27 +1,47 @@
-venv/
-/venv
-
+# python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+ENV/
+
+# build artifacts
+build/
+dist/
+*.spec
+*.egg-info/
+*.egg
+
+# ide
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# os
 .DS_Store
-test_data/
-test_output/
+Thumbs.db
+
+# project specific
+localvibe.lance/
+*.lance/
+library_config.json
 *.log
 *.npy
 *.pth
 
-/dist
+# test data (samples are large)
+test_data/
+test_output/
+test_pack/
 
-/dist
-
-/build
-/build
-
-/localvibe.spec
-/localvibe.lance
-
-localvibe.lance/
-
+# docs (auto-generated)
 docs/
 
-/docs
+# env
+.env
+*.env
