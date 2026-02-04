@@ -1,4 +1,4 @@
-# python
+/per# python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -27,7 +27,7 @@ dist/
 Thumbs.db
 
 # project specific
-localvibe.lance/
+spice.lance/
 *.lance/
 library_config.json
 *.log

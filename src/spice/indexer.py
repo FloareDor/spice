@@ -1,9 +1,9 @@
 """
-LocalVibe Audio Indexer
+spice audio indexer
 Scans folders, extracts CLaMP 3 embeddings, analyzes BPM/key, stores in LanceDB.
 
 Usage:
-    python indexer.py <folder> [--db ./localvibe.lance] [--recursive]
+    python indexer.py <folder> [--db ./spice.lance] [--recursive]
 
 Activate venv first:
     .\\venv\\Scripts\\activate
@@ -57,7 +57,7 @@ def analyze_audio_safe(audio_path: Path) -> dict:
 
 def index_folder(
     folder: Path,
-    db_path: str = "./localvibe.lance",
+    db_path: str = "./spice.lance",
     recursive: bool = False,
     batch_size: int = 50,
     max_workers: int = 4,
@@ -219,7 +219,7 @@ def index_folder(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="LocalVibe Audio Indexer - Index audio samples for semantic search"
+        description="spice audio indexer - Index audio samples for semantic search"
     )
     parser.add_argument(
         "folder",
@@ -227,8 +227,8 @@ def main():
     )
     parser.add_argument(
         "--db",
-        default="./localvibe.lance",
-        help="Path to LanceDB database (default: ./localvibe.lance)"
+        default="./spice.lance",
+        help="Path to LanceDB database (default: ./spice.lance)"
     )
     parser.add_argument(
         "--recursive", "-r",
@@ -256,7 +256,7 @@ def main():
 
     print()
     print("=" * 60)
-    print("  LocalVibe Audio Indexer")
+    print("  spice audio indexer")
     print("=" * 60)
     print(f"  Folder:    {folder}")
     print(f"  Database:  {args.db}")

@@ -5,15 +5,15 @@ from pathlib import Path
 
 # Get stable user directory
 if sys.platform == "win32":
-    APP_DATA = Path(os.getenv('LOCALAPPDATA')) / "LocalVibe"
+    APP_DATA = Path(os.getenv('LOCALAPPDATA')) / "spice"
 else:
-    APP_DATA = Path.home() / ".local" / "share" / "LocalVibe"
+    APP_DATA = Path.home() / ".local" / "share" / "spice"
 
 APP_DATA.mkdir(parents=True, exist_ok=True)
 
 # Update paths to use this directory
 CONFIG_FILE = APP_DATA / "library_config.json"
-DB_PATH = APP_DATA / "localvibe.lance"
+DB_PATH = APP_DATA / "spice.lance"
 
 def load_config():
     if not CONFIG_FILE.exists():

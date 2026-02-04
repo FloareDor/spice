@@ -1,5 +1,5 @@
 """
-LocalVibe LanceDB Vector Storage Module
+spice database module
 Stores CLaMP 3 embeddings for semantic audio search.
 """
 import json
@@ -16,7 +16,7 @@ import pyarrow as pa
 EMBEDDING_DIM = 768
 
 
-def get_db(db_path: str = "./localvibe.lance") -> lancedb.DBConnection:
+def get_db(db_path: str = "./spice.lance") -> lancedb.DBConnection:
     """
     Initialize or connect to a LanceDB database.
 

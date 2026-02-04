@@ -329,7 +329,7 @@ class LibraryInterface(QWidget):
 class MainWindow(FluentWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("LocalVibe")
+        self.setWindowTitle("spice")
         self.resize(1000, 750)
         
         # Center window

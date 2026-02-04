@@ -1,5 +1,5 @@
 """
-LocalVibe Galaxy Map - UMAP-based sample visualization
+spice galaxy map - UMAP-based sample visualization
 Plots all samples in 2D space based on their semantic embeddings.
 """
 import json
@@ -133,7 +133,7 @@ class GalaxyWidget(QWidget):
         self.highlight_radius = 8
         self.setStyleSheet("background-color: #1a1a2e;")
 
-    def load_data(self, db_path: str = "./localvibe.lance"):
+    def load_data(self, db_path: str = "./spice.lance"):
         """Start loading and computing UMAP projection."""
         self.loading = True
         self.status_message = "Loading..."

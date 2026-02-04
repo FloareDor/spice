@@ -19,7 +19,7 @@ def build():
     # PyInstaller arguments
     args = [
         str(project_root / "run.py"),           # Main script
-        "--name=LocalVibe",                     # Executable name
+        "--name=spice",                         # Executable name
         "--clean",                              # Clean cache
         "--noconfirm",                          # Replace output directory without asking
         "--windowed",                           # No console window (GUI mode)
@@ -60,9 +60,9 @@ def build():
         "--exclude-module=notebook",
     ]
 
-    print("Building LocalVibe...")
+    print("Building spice...")
     PyInstaller.__main__.run(args)
-    print("Build complete. Check 'dist/LocalVibe/LocalVibe.exe'")
+    print("Build complete. Check 'dist/spice/spice.exe'")
 
 if __name__ == "__main__":
     build()

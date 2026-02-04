@@ -1,5 +1,5 @@
 """
-LocalVibe Search CLI
+spice Search CLI
 Search your indexed audio samples by audio file or text description.
 
 Usage:
@@ -23,7 +23,7 @@ from . import database as db
 from .model_wrapper import get_model
 
 # Default database path
-DEFAULT_DB = "./localvibe.lance"
+DEFAULT_DB = "./spice.lance"
 
 # BPM tolerance for single value (±5 BPM)
 BPM_TOLERANCE = 5
@@ -349,7 +349,7 @@ def print_results(results: list[dict], query_type: str) -> None:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="LocalVibe Search - Find audio samples by similarity or description",
+        description="spice search - Find audio samples by similarity or description",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -412,7 +412,7 @@ Examples:
 
     print()
     print("=" * 60)
-    print("  LocalVibe Search")
+    print("  spice search")
     print("=" * 60)
 
     # Show active filters

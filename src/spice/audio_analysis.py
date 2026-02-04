@@ -1,5 +1,5 @@
 r"""
-LocalVibe Core Tech Validator (Librosa Edition)
+spice core tech validator (Librosa Edition)
 Validates BPM and Key detection on a folder of WAV files.
 
 Uses librosa instead of Essentia for cross-platform Windows support.
@@ -116,7 +116,7 @@ def analyze_audio(audio_path: str) -> dict:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="LocalVibe Core Tech Validator - Analyze WAV files for BPM and Key"
+        description="spice core tech validator - Analyze WAV files for BPM and Key"
     )
     parser.add_argument(
         "folder", 
@@ -151,7 +151,7 @@ def main():
     # Header
     print()
     print("=" * 60)
-    print("  LocalVibe Core Tech Validator")
+    print("  spice core tech validator")
     print("  Librosa Audio Analysis (Cross-Platform)")
     print("=" * 60)
     print(f"  Folder: {folder}")

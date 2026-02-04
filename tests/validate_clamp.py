@@ -1,5 +1,5 @@
 """
-LocalVibe CLaMP 3 Integration Validator
+spice clamp 3 integration validator
 Generates a test audio file and runs CLaMP 3 feature extraction.
 """
 import os

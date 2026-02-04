@@ -1,5 +1,5 @@
 r"""
-LocalVibe LanceDB Integration Validator
+spice database integration validator
 Verifies end-to-end embedding storage and retrieval.
 
 Usage:
@@ -110,13 +110,13 @@ def extract_clamp_embedding(audio_path: Path, output_dir: Path) -> np.ndarray:
 def main():
     print()
     print("=" * 60)
-    print("  LocalVibe LanceDB Integration Validator")
+    print("  spice database integration validator")
     print("=" * 60)
     print()
 
     base_dir = Path.cwd()
     test_dir = base_dir / "test_lancedb"
-    db_path = base_dir / "test_localvibe.lance"
+    db_path = base_dir / "test_spice.lance"
 
     # Cleanup from previous runs
     if test_dir.exists():
